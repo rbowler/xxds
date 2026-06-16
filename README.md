@@ -1,10 +1,12 @@
-# xxds - Variable Block File Hex Dumper
+# xxds - Record File Hex Dumper
 
-xxds is a C program that reads Variable Block (VB) format files and displays them in hexadecimal format with EBCDIC character representation.
+xxds is a C program that reads record-oriented files and displays them in hexadecimal format with EBCDIC character representation. By default it reads Variable Block (VB) format files; fixed-length records are also supported.
 
 ## Description
 
-xxds reads VB format files from standard input and prints them in a hex dump format similar to `xxd` or `hexdump`, but specifically designed for EBCDIC-encoded Variable Block files. The program processes records by reading the RDW containing a 2-byte big-endian length field, followed by the record data.
+xxds reads files from standard input and prints them in a hex dump format similar to `xxd` or `hexdump`, but specifically designed for EBCDIC-encoded mainframe data.
+
+In the default mode, the program processes Variable Block records by reading a 2-byte big-endian length field, followed by the record data. With the `-f` / `--fixed` option, records are read at a fixed byte length with no length prefix.
 
 ## Building
 
@@ -28,16 +30,28 @@ This will copy the executable to `/usr/local/bin/`.
 
 ## Usage
 
-Read from a file:
+```
+xxds [-f|--fixed record_length] [<file]
+```
+
+Read a Variable Block file (default):
 
 ```bash
 ./xxds < input_file.vb
+```
+
+Read fixed-length records (for example, 80-byte records):
+
+```bash
+./xxds -f 80 < input_file.dat
+./xxds --fixed 80 < input_file.dat
 ```
 
 Or pipe input:
 
 ```bash
 cat input_file.vb | ./xxds
+cat input_file.dat | ./xxds -f 80
 ```
 
 ## Output Format
@@ -80,7 +94,8 @@ End of file: 1 record, 88 bytes (00000058)
 
 ## Features
 
-- Reads Variable Block format files from stdin
+- Reads Variable Block format files from stdin (default)
+- Reads fixed-length records with `-f` / `--fixed`
 - Displays records with hex dump and EBCDIC character representation
 - Handles incomplete records gracefully
 - Tracks record count and total byte count
@@ -89,11 +104,17 @@ End of file: 1 record, 88 bytes (00000058)
 
 ## Record Format
 
+### Variable Block (default)
+
 VB format records consist of:
 - **4 bytes**: RDW consisting of:
   * a big-endian 16-bit unsigned integer specifying the total record length (including the RDW itself)
   * 2 flag bytes (ignored by this program)
 - **Remaining bytes**: Record data (length - 4 bytes)
+
+### Fixed Length (`-f` / `--fixed`)
+
+Fixed-length records consist of a constant number of data bytes per record, with no length prefix. The record length is specified on the command line. If the file size is not an exact multiple of the record length, the final partial record is reported as incomplete.
 
 ## Error Handling
 

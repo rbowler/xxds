@@ -86,20 +86,85 @@ static void print_chunk(unsigned char *data, int offset, int len) {
     printf("\n");
 }
 
-int main(void) {
+static void usage(const char *prog) {
+    fprintf(stderr, "Usage: %s [-f|--fixed record_length] [<file]\n", prog);
+    fprintf(stderr, "  -f, --fixed LENGTH  Read fixed-length records (default: variable block)\n");
+}
+
+int main(int argc, char *argv[]) {
     uint32_t file_offset = 0;
     uint32_t record_count = 0;
     uint64_t total_bytes = 0;
     int incomplete_record = 0;
-    
+    size_t fixed_len = 0;
+    int i;
+
+    for (i = 1; i < argc; i++) {
+        if (strcmp(argv[i], "-f") == 0 || strcmp(argv[i], "--fixed") == 0) {
+            char *end;
+            unsigned long parsed;
+
+            if (i + 1 >= argc) {
+                fprintf(stderr, "%s: missing record length for %s\n", argv[0], argv[i]);
+                usage(argv[0]);
+                return 1;
+            }
+            parsed = strtoul(argv[++i], &end, 10);
+            if (*end != '\0' || parsed == 0) {
+                fprintf(stderr, "%s: invalid record length: %s\n", argv[0], argv[i]);
+                usage(argv[0]);
+                return 1;
+            }
+            fixed_len = (size_t)parsed;
+        } else {
+            fprintf(stderr, "%s: unknown option: %s\n", argv[0], argv[i]);
+            usage(argv[0]);
+            return 1;
+        }
+    }
+
     while (1) {
         unsigned char len_bytes[2];
         size_t bytes_read;
         uint16_t reclen;
         unsigned char *record_data;
         size_t data_len;
-        int i;
-        
+        int j;
+
+        if (fixed_len > 0) {
+            record_data = (unsigned char *)malloc(fixed_len);
+            if (record_data == NULL) {
+                fprintf(stderr, "Memory allocation error\n");
+                exit(1);
+            }
+
+            bytes_read = fread(record_data, 1, fixed_len, stdin);
+            if (bytes_read == 0) {
+                free(record_data);
+                break;
+            }
+
+            record_count++;
+            printf("Record: %u  Length: %zu  Offset: %08X\n",
+                   record_count, bytes_read, file_offset);
+
+            file_offset += bytes_read;
+            total_bytes += bytes_read;
+
+            for (j = 0; j < (int)bytes_read; j += 16) {
+                int chunk_len = (bytes_read - j < 16) ? (int)(bytes_read - j) : 16;
+                print_chunk(record_data + j, j, chunk_len);
+            }
+
+            free(record_data);
+
+            if (bytes_read < fixed_len) {
+                incomplete_record = 1;
+                break;
+            }
+            continue;
+        }
+
         /* Read the 2-byte record length (big-endian) */
         bytes_read = fread(len_bytes, 1, 2, stdin);
         
@@ -156,9 +221,9 @@ int main(void) {
         total_bytes += bytes_read;
         
         /* Print the record in 16-byte chunks */
-        for (i = 0; i < reclen; i += 16) {
-            int chunk_len = (reclen - i < 16) ? (reclen - i) : 16;
-            print_chunk(record_data + i, i, chunk_len);
+        for (j = 0; j < reclen; j += 16) {
+            int chunk_len = (reclen - j < 16) ? (reclen - j) : 16;
+            print_chunk(record_data + j, j, chunk_len);
         }
         
         free(record_data);
